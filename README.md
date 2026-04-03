@@ -151,7 +151,7 @@ python test_det_api.py
 ```
 
 **如何获取自定义模型？**
-结合官方生态工具 **ocr_trainer**（详见 `turingkiller-guide.md`），你可以轻松训练针对特定复杂验证码的识别模型，并将其导出为 `.onnx` 格式，配合生成的 `.json` 字符集配置文件放入 `my_model` 目录中即可无缝集成。
+结合官方生态工具 **ocr_trainer**（详见 [`turingkiller-guide.md`](./turingkiller-guide.md)），你可以轻松训练针对特定复杂验证码的识别模型，并将其导出为 `.onnx` 格式，配合生成的 `.json` 字符集配置文件放入 `my_model` 目录中即可无缝集成。
 
 ## 📜 鸣谢
 
