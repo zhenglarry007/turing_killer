@@ -1,0 +1,15 @@
+{
+    "jrcpcx": {
+        "onnx_path": "./my_model/jrcpcx.onnx",	
+        "charsets_path": "./my_model/jrcpcx.json"
+    },
+    "dddd_ocr": {
+        "onnx_path": "./my_model/dddd_ocr.onnx",	
+        "charsets_path": "./my_model/dddd_ocr.json"
+    },
+    "dddd_det": {
+        "onnx_path": "./my_model/dddd_det.onnx",	
+        "charsets_path": "./my_model/dddd_det.json"
+    }
+  
+}
