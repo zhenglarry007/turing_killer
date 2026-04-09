@@ -93,12 +93,12 @@ def ocr(opt):
            return {"status": "error", "message": "No image provided"}, 400
 
         if opt == 'ocr':     
-            result = ocr.classification(img)        
-            return set_ret(result, 'json')  
+            result = ocr.classification(img)    
+            return set_ret(result, 'json')
 
         elif opt == 'det':           
             result = ocr.detection(img)  
-            return set_ret(result, "json")             
+            return set_ret(result, "json")         
             
     except Exception as e:
         print(f'Error in model_name={model_name}: {str(e)}')

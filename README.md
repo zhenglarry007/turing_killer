@@ -192,7 +192,7 @@ python test_det_api.py
   - 训练后（精准识别）：![训练之后](./example/jrcpcx/resource/训练之后.png)
 
 - **运行视频演示**：
-  - 🎥 [未训练之前实测录屏](./example/jrcpcx/resource/未训练之前.mov)
+  - 🎥 [未训练之前实测录屏](./example/jrcpcx/resource/未训练之前.mp4)
   - 🎥 [训练之后实测录屏](./example/jrcpcx/resource/训练之后.mov)
 
 > **📁 案例目录指南**：

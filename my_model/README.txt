@@ -17,5 +17,5 @@ turing-killer 的项目，对典型的图形验证码进行逐个的实战。
 - 训练后: /Users/larryzheng/Downloads/code/turing_killer/example/jrcpcx/resource/训练之后.png
 
 视频对比：
-- 训练前: /Users/larryzheng/Downloads/code/turing_killer/example/jrcpcx/resource/未训练之前.mov
+- 训练前: /Users/larryzheng/Downloads/code/turing_killer/example/jrcpcx/resource/未训练之前.mp4
 - 训练后: /Users/larryzheng/Downloads/code/turing_killer/example/jrcpcx/resource/训练之后.mov
