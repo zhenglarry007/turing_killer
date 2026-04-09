@@ -3,4 +3,19 @@
 在AI大模型火热的今天，如OPEN CLOW 之类的智能体以及Qwen3-VL视觉理解模型的出现，和Yolox 目标检测模型相比，对图形验证的识别哪个更胜一筹呢，我们通过
 turing-killer 的项目，对典型的图形验证码进行逐个的实战。
 项目: 
-     
+     turing-killer 实战案例分析
+
+--- 案例一：jrcpcx 特定复杂验证码 ---
+【测试环境】
+测试工具: ocr_trainer
+测试集样本: 1000张
+
+【效果直观对比】
+为便于直观感受，请参考以下资源路径查看实际效果：
+图片对比：
+- 训练前: /Users/larryzheng/Downloads/code/turing_killer/example/jrcpcx/resource/未训练之前.png
+- 训练后: /Users/larryzheng/Downloads/code/turing_killer/example/jrcpcx/resource/训练之后.png
+
+视频对比：
+- 训练前: /Users/larryzheng/Downloads/code/turing_killer/example/jrcpcx/resource/未训练之前.mov
+- 训练后: /Users/larryzheng/Downloads/code/turing_killer/example/jrcpcx/resource/训练之后.mov
