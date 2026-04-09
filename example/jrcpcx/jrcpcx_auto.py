@@ -12,7 +12,9 @@ import requests
 try:
     from pic_finger import PicFinger
 except ImportError:
-    from pic_finger import PicFinger
+    # 处理导入失败的情况，如打印警告或使用备用方案
+    print("警告: pic_finger 模块未找到，将使用备用方案")
+    PicFinger = None
 
 def test_ocr(image_bytes):
     """
@@ -77,8 +79,11 @@ def get_captcha_and_recognize(page):
             
         # 计算图片指纹 MD5
         try:
-            pic_finger = PicFinger(img_buffer)
-            img_md5 = pic_finger.get_hash_code()
+            if PicFinger:
+                pic_finger = PicFinger(img_buffer)
+                img_md5 = pic_finger.get_hash_code()
+            else:
+                img_md5 = str(int(time.time()))
         except Exception as e:
             print(f"计算图片指纹失败: {e}")
             img_md5 = str(int(time.time()))
@@ -90,13 +95,20 @@ def get_captcha_and_recognize(page):
         img_buffer.save(rgb_byte_arr, format='JPEG')
         rgb_image_bytes = rgb_byte_arr.getvalue()
         
-        result = test_ocr(rgb_image_bytes)
+        result = ""
+        max_retries = 3
+        for attempt in range(max_retries):
+            result = test_ocr(rgb_image_bytes)
+            if result and len(result.strip()) > 0:
+                break
+            print(f"第 {attempt+1} 次识别失败，重试中...")
+            time.sleep(1)
         
         print("-" * 30)
         print(f"识别结果: {result}")
         print("-" * 30)
         
-        if not result:
+        if not result or len(result.strip()) == 0:
             print("未能识别出验证码，停止流程")
             return
 
