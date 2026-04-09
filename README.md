@@ -70,40 +70,58 @@ Total models loaded: 3
 
 ## 🔌 API 接口文档
 
+服务端采用同一套统一的路由接口 `/<opt>` 对外提供服务，目前支持 `ocr` 和 `det` 两种操作模式。接口同时支持 Form-Data、JSON 以及 URL Query 参数的解析。
+
 ### 1. OCR 文字识别接口
 
-- **接口地址**：`POST /ocr`
+- **接口地址**：`POST http://127.0.0.1:9890/ocr`
 - **功能**：对传入的验证码图片进行字符识别。
-- **请求参数** (Form-Data):
-  - `image`: 图片文件。
-  - `model`: 使用的模型名称 (必须在 `tk_server.json` 中配置，如 `dddd_ocr`, `jrcpcx`)。
+- **请求参数**:
+  - `model` (必须): 使用的模型名称 (必须在 `tk_server.json` 中配置，如 `dddd_ocr`, `jrcpcx`)。可以通过 JSON Body、Form-Data 或 URL 参数传递。
+  - `image` (必须): 图片文件或图片 Base64 编码数据。可以通过 Form-Data (文件上传) 或 JSON Body (Base64 字符串) 传递。
 - **返回结果** (JSON):
-  ```json
-  {
-    "status": 200,
-    "result": "abcd",
-    "msg": ""
-  }
-  ```
+  - **成功示例**:
+    ```json
+    {
+      "status": 200,
+      "result": "abcd",
+      "msg": ""
+    }
+    ```
+  - **失败示例**:
+    ```json
+    {
+      "status": "error",
+      "message": "Model parameter is required"
+    }
+    ```
 
 ### 2. 目标检测接口
 
-- **接口地址**：`POST /det`
+- **接口地址**：`POST http://127.0.0.1:9890/det`
 - **功能**：检测图片中的目标（如点选验证码的文字坐标）。
-- **请求参数** (Form-Data):
-  - `image`: 图片文件。
-  - `model`: 使用的模型名称 (如 `dddd_det`)。
-- **返回结果** (JSON): 返回检测框的坐标数组 `[x_min, y_min, x_max, y_max]`。
-  ```json
-  {
-    "status": 200,
-    "result": [
-      [10, 20, 50, 60],
-      [70, 20, 110, 60]
-    ],
-    "msg": ""
-  }
-  ```
+- **请求参数**:
+  - `model` (必须): 使用的模型名称 (如 `dddd_det`)。支持 JSON Body、Form-Data 或 URL 参数。
+  - `image` (必须): 图片文件或图片 Base64 编码数据。
+- **返回结果** (JSON): 
+  - **成功示例** (返回检测框的坐标数组 `[x_min, y_min, x_max, y_max]`):
+    ```json
+    {
+      "status": 200,
+      "result": [
+        [10, 20, 50, 60],
+        [70, 20, 110, 60]
+      ],
+      "msg": ""
+    }
+    ```
+  - **失败示例**:
+    ```json
+    {
+      "status": "error",
+      "message": "No image provided"
+    }
+    ```
 
 ## 💻 客户端测试示例 (Demo)
 
