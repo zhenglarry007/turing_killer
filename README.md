@@ -213,6 +213,9 @@ python test_word_api.py
   
   ![训练之后实测录屏](./example/jrcpcx/resource/训练之后.gif)
 
+- **目标检测演示**：
+  ![目标检测演示](./example/jrcpcx/resource/目标检测演示.gif)
+
 > **📁 案例目录指南**：
 > 以 `jrcpcx` 为例，相关代码与数据均位于 [`example/`](./example/) 目录中。在具体的案例文件夹（如 `example/jrcpcx/`）下，你可以找到自动化测试脚本（如 `jrcpcx_auto.py`）以及按批次存放的测试结果图片（识别成功的位于 `success/` 目录，失败的位于 `fail/` 目录）。你可以运行这些脚本亲自验证模型的实际表现。
 
