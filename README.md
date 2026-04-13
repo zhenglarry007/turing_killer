@@ -26,14 +26,15 @@ turing_killer/
 ├── my_model/              # 模型存放目录
 │   ├── dddd_det.onnx / .json  # 目标检测默认模型及配置
 │   ├── dddd_ocr.onnx / .json  # OCR识别默认模型及配置
-│   ├── jrcpcx.onnx / .json    # 自定义训练模型示例
-│   └── README.txt
+│   └── jrcpcx.onnx / .json    # 自定义训练模型示例
 ├── demo/                  # 测试脚本和样例图片
+│   ├── config.py          # 通用配置参数管理
 │   ├── test_det_api.py    # 目标检测 API 调用测试脚本 (附带裁剪和画框功能)
 │   ├── test_ocr_api.py    # OCR 识别 API 调用测试脚本
-│   ├── pic_det/           # 目标检测测试图片
-│   └── pic_ocr/           # OCR 识别测试图片
-└── REDEME.md              # 本说明文档
+│   ├── test_word_api.py   # 点选验证码测试脚本
+│   ├── pic/               # 样例图片存放目录
+│   └── output/            # 脚本执行结果输出目录
+└── README.md              # 本说明文档
 ```
 
 ## 🛠️ 安装与运行
@@ -125,11 +126,11 @@ Total models loaded: 3
 
 ## 💻 客户端测试示例 (Demo)
 
-在 `demo` 目录下提供了两个完整的测试脚本，展示了如何调用服务端的 API 接口。
+在 `demo` 目录下提供了三个完整的测试脚本，展示了如何调用服务端的 API 接口。所有测试脚本共用 `demo/config.py` 中的基础配置。
 
 ### 1. 测试 OCR 识别
 
-运行 `demo/test_ocr_api.py`，它会遍历 `pic_ocr` 目录下的图片并调用服务进行文字识别：
+运行 `demo/test_ocr_api.py`，它会遍历 `demo/pic/ocr` 目录下的图片并调用服务进行文字识别，识别结果会作为 `.txt` 文件保存在 `demo/output/ocr` 目录下：
 
 ```bash
 cd demo
@@ -138,14 +139,21 @@ python test_ocr_api.py
 
 ### 2. 测试目标检测
 
-运行 `demo/test_det_api.py`，它不仅调用检测 API，还会使用 OpenCV 对原图进行目标裁剪、画框标记（红色边框）并保存：
+运行 `demo/test_det_api.py`，它不仅调用检测 API，还会使用 OpenCV 对原图进行目标裁剪、画框标记（红色边框）并保存。测试图片来源于 `demo/pic/det` 目录，检测结果及可视化标记图片会保存在 `demo/output/det` 目录下：
 
 ```bash
 cd demo
 python test_det_api.py
 ```
 
-检测结果及可视化标记图片会保存在 `demo/output` 目录下。
+### 3. 测试点选验证码
+
+运行 `demo/test_word_api.py`，它结合了目标检测与 OCR 识别能力，专门用于处理文字点选验证码（先检测出文字的坐标，再将每个区域裁剪并进行 OCR 识别验证汉字）。测试图片来源于 `demo/pic/word` 目录，可视化标记图片及结果会保存在 `demo/output/word` 目录下：
+
+```bash
+cd demo
+python test_word_api.py
+```
 
 ## ⚙️ 模型配置与自定义模型
 
