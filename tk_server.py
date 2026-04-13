@@ -72,7 +72,6 @@ def set_ret(result, ret_type='text'):
             return json.dumps({"status": 200, "result": "", "msg": str(result)})
         else:
             return json.dumps({"status": 200, "result": result, "msg": ""})
-        # return json.dumps({"succ": isinstance(result, str), "result": str(result)})
     else:
         if isinstance(result, Exception):
             return ''
@@ -83,22 +82,23 @@ def set_ret(result, ret_type='text'):
 def ocr(opt):
     try:
         data = request.get_json(silent=True) or request.form or request.args
-        model_name = data.get('model')
-            
+
+        model_name = data.get('model')            
         if not model_name:
             return {"status": "error", "message": "Model parameter is required"}, 400
-        ocr = server.models[model_name];               
+                     
         img = get_img(request)
         if img is None:
            return {"status": "error", "message": "No image provided"}, 400
 
+        ocr = server.models[model_name];  
         if opt == 'ocr':     
-            result = ocr.classification(img)    
-            return set_ret(result, 'json')
+            result = ocr.classification(img)        
+            return set_ret(result, 'json')  
 
         elif opt == 'det':           
             result = ocr.detection(img)  
-            return set_ret(result, "json")         
+            return set_ret(result, "json")             
             
     except Exception as e:
         print(f'Error in model_name={model_name}: {str(e)}')

@@ -1,52 +1,50 @@
 # 导入必要的库
-import ddddocr  # 用于本地目标检测和OCR识别
+# -*- coding: utf-8 -*-
 import cv2      # OpenCV库，用于图像处理
 import os       # 用于文件和目录操作
 import requests # 用于HTTP请求（远程API调用）
 import numpy as np  # 添加numpy用于图像合并
+from config import Config
 
 class MyOcr(object):
     def __init__(self, api_url=None):
         """
         初始化OCR处理器
         参数:
-            api_url: 可选，远程OCR服务的API地址。如果为None则使用本地ddddocr
+            api_url: 远程OCR服务的API地址
         """
         self.api_url = api_url
-        # 如果没有提供API地址，初始化本地OCR
-        if not self.api_url:
-            print('api_url='+str(api_url))
-            self.ocr = ddddocr.DdddOcr(det=True)
     
     def detect_objects(self, filename, img_bytes):
         """
-        对象检测方法（支持本地/远程两种模式）
+        对象检测方法（远程模式）
         参数:
+            filename: 文件名
             img_bytes: 图片的二进制数据
         返回:
             检测框坐标列表，每个框格式为[x1,y1,x2,y2]
         """
-        if self.api_url:
-            # 远程API模式
-            try:
-                # 发送POST请求到API服务
-                files = {'image': (filename, img_bytes, 'image/jpeg')}  # 修正这里
-                 # 将model参数放在data中
-                data = {'model': 'dddd_det'}  # 关键修正！
-                resp = requests.post(
-                    self.api_url,
-                    files=files,
-                    data=data,
-                    timeout=10
-                )
-                resp.raise_for_status()  # 检查HTTP错误
-                return resp.json().get('result')  # 假设API返回JSON格式的检测结果
-            except Exception as e:
-                print(f"调用API服务出错: {str(e)}")
-                return []
-        else:
-            # 本地OCR模式
-            return self.ocr.detection(img_bytes)
+        # 远程API模式
+        if not self.api_url:
+            print("API地址未设置")
+            return []
+            
+        try:
+            # 发送POST请求到API服务
+            files = {'image': (filename, img_bytes, 'image/jpeg')}
+            # 将model参数放在data中
+            data = {'model': 'dddd_det'}  # 关键修正！
+            resp = requests.post(
+                self.api_url,
+                files=files,
+                data=data,
+                timeout=10
+            )
+            resp.raise_for_status()  # 检查HTTP错误
+            return resp.json().get('result')  # 假设API返回JSON格式的检测结果
+        except Exception as e:
+            print(f"调用API服务出错: {str(e)}")
+            return []
     
     def merge_images_horizontally(self, images):
         """
@@ -80,19 +78,7 @@ class MyOcr(object):
             x_offset += w
             
         return merged_image
-    
-    def recognize_merged_image(self, image):
-        """
-        识别合并后的图像
-        参数:
-            image: 合并后的图像
-        返回:
-            OCR识别结果
-        """
-        # 这里可以根据需要实现OCR识别逻辑
-        # 例如使用ddddocr或其他OCR库进行识别
-        # 暂时返回空字符串作为示例
-        return ""
+      
     
     def process_directory(self, input_path, output_path):
         """
@@ -124,7 +110,7 @@ class MyOcr(object):
                     with open(file_path, 'rb') as f:
                         img_bytes = f.read()
                     
-                    # 步骤2: 调用检测方法（自动区分本地/远程模式）
+                    # 步骤2: 调用检测方法（远程模式）
                     poses = self.detect_objects(filename, img_bytes)
                     print(f"文件 {filename} 检测到 {len(poses)} 个目标区域")
                     
@@ -135,10 +121,16 @@ class MyOcr(object):
 
                     print("poses="+str(poses))
                     
-                    # 步骤3: 使用OpenCV读取图片用于裁剪和标注
-                    im = cv2.imread(file_path)
+                    # 步骤3: 使用OpenCV读取图片用于裁剪和标注                    
+                    img_array = np.frombuffer(img_bytes, dtype=np.uint8)
+                    img = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
+                    
+                    if img is None:
+                        print(f"警告: 无法解码图片 {filename}")
+                        continue
+                        
                     # 创建原图的副本用于标注（避免修改影响裁剪）
-                    marked_img = im.copy()
+                    marked_img = img.copy()
                     
                     # 初始化cropped_images列表，用于存储所有裁剪的图像
                     cropped_images = []
@@ -162,7 +154,7 @@ class MyOcr(object):
                             continue
                         
                         # 4.1 裁剪目标区域
-                        cropped_img = im[y1:y2, x1:x2]
+                        cropped_img = img[y1:y2, x1:x2]
                         
                         # 将裁剪的图像添加到列表中
                         cropped_images.append(cropped_img)
@@ -176,8 +168,22 @@ class MyOcr(object):
                             f"{file_base}_{i}{file_ext}"
                         )
                         
-                        # 4.3 保存裁剪后的图片
-                        cv2.imwrite(cropped_path, cropped_img)
+                        # 4.3 保存裁剪后的图片（使用imencode处理中文路径）
+                        # 根据文件扩展名确定编码格式
+                        if file_ext.lower() in ['.jpg', '.jpeg']:
+                            success, encoded_img = cv2.imencode('.jpg', cropped_img)
+                        elif file_ext.lower() == '.png':
+                            success, encoded_img = cv2.imencode('.png', cropped_img)
+                        elif file_ext.lower() == '.bmp':
+                            success, encoded_img = cv2.imencode('.bmp', cropped_img)
+                        else:
+                            success, encoded_img = cv2.imencode('.jpg', cropped_img)
+                        
+                        if success:
+                            with open(cropped_path, 'wb') as f:
+                                f.write(encoded_img.tobytes())
+                        else:
+                            print(f"保存裁剪图片失败: {cropped_path}")
                         
                         # 4.4 在副本图上绘制矩形标记(红色边框，线宽2像素)
                         marked_img = cv2.rectangle(
@@ -189,9 +195,7 @@ class MyOcr(object):
                     
                     # 步骤5: 横向合并所有截取的区域并进行OCR识别
                     if cropped_images:
-                        merged_image = self.merge_images_horizontally(cropped_images)
-                        ocr_result = self.recognize_merged_image(merged_image)
-                        print(f"文件 {filename} 合并区域OCR识别结果: {ocr_result}")
+                        merged_image = self.merge_images_horizontally(cropped_images)                      
                     else:
                         print(f"文件 {filename} 无有效区域可合并识别")
                     
@@ -199,10 +203,25 @@ class MyOcr(object):
                     # 文件名格式: 原文件名_mark.扩展名
                     marked_path = os.path.join(
                         output_path,
-                        f"{file_base}_mark{file_ext}"  # 修复了这里的语法错误
+                        f"{file_base}_mark{file_ext}"
                     )
-                    cv2.imwrite(marked_path, marked_img)
                     
+                    # 使用imencode保存标记后的图片（处理中文路径）
+                    if file_ext.lower() in ['.jpg', '.jpeg']:
+                        success, encoded_img = cv2.imencode('.jpg', marked_img)
+                    elif file_ext.lower() == '.png':
+                        success, encoded_img = cv2.imencode('.png', marked_img)
+                    elif file_ext.lower() == '.bmp':
+                        success, encoded_img = cv2.imencode('.bmp', marked_img)
+                    else:
+                        success, encoded_img = cv2.imencode('.jpg', marked_img)
+                    
+                    if success:
+                        with open(marked_path, 'wb') as f:
+                            f.write(encoded_img.tobytes())
+                    else:
+                        print(f"保存标记图片失败: {marked_path}")
+
                     print(f"成功处理文件 {filename}，结果已保存到 {output_path}")
                 
                 except Exception as e:
@@ -213,10 +232,10 @@ class MyOcr(object):
 # 主程序入口
 if __name__ == '__main__':
     # 配置参数（根据实际情况修改）
-    input_dir = "pic_det"   # 输入图片目录
-    output_dir = "output"     # 输出结果目录
-    api_url = "http://localhost:9890/det"  # OCR API地址
-    #api_url = None;
+    input_dir = Config.get_input_dir("det")   # 输入图片目录
+    output_dir = Config.get_output_dir("det")     # 输出结果目录
+    api_url = Config.DET_API_URL  # OCR API地址
+    
     # 创建OCR处理器实例（传入API地址）
     my_ocr = MyOcr(api_url)
     
