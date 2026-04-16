@@ -137,10 +137,18 @@ def get_image_by_js(driver, element_id):
                 base64_str = src.split(',', 1)[1]
                 return base64.b64decode(base64_str)
             elif src and src.startswith('http'):
-                import requests
-                resp = requests.get(src, timeout=10)
-                if resp.status_code == 200:
-                    return resp.content
+                data_url = driver.execute_script("""
+                    var img = arguments[0];
+                    var canvas = document.createElement('canvas');
+                    canvas.width = img.naturalWidth || img.width;
+                    canvas.height = img.naturalHeight || img.height;
+                    var ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0);
+                    return canvas.toDataURL('image/png');
+                """, element)
+                if data_url and data_url.startswith('data:image'):
+                    base64_str = data_url.split(',', 1)[1]
+                    return base64.b64decode(base64_str)
         
         location = element.location
         size = element.size
@@ -161,6 +169,8 @@ def get_image_by_js(driver, element_id):
         
     except Exception as e:
         print(f"获取图片失败: {e}")
+        import traceback
+        traceback.print_exc()
         return None
 
 
