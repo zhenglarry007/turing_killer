@@ -75,6 +75,13 @@ def get_word_by_det(image_bytes, ext_rate=0.15):
         return None
     
     img = Image.open(io.BytesIO(image_bytes))
+    if img.mode == 'RGBA':
+        background = Image.new('RGB', img.size, (255, 255, 255))
+        background.paste(img, mask=img.split()[3])
+        img = background
+    elif img.mode != 'RGB':
+        img = img.convert('RGB')
+    
     img_width, img_height = img.size
     
     result = {"center": {}, "bbox": {}}
