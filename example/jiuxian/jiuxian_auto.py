@@ -117,29 +117,48 @@ def is_chinese_char(text):
     return bool(chinese_pattern.match(text.strip()))
 
 
-def get_element_screenshot(driver, element):
-    location = element.location
-    size = element.size
-    
-    png = driver.get_screenshot_as_png()
-    img = Image.open(io.BytesIO(png))
-    
-    left = location['x']
-    top = location['y']
-    right = location['x'] + size['width']
-    bottom = location['y'] + size['height']
-    
-    img = img.crop((left, top, right, bottom))
-    
-    buf = io.BytesIO()
-    img.save(buf, format='PNG')
-    return buf.getvalue()
-
-
 def get_image_by_js(driver, element_id):
     try:
         element = driver.find_element(By.ID, element_id)
-        return get_element_screenshot(driver, element)
+        
+        tag_name = element.tag_name.lower()
+        
+        if tag_name == 'canvas':
+            data_url = driver.execute_script(
+                "return arguments[0].toDataURL('image/png');", element
+            )
+            if data_url and data_url.startswith('data:image'):
+                base64_str = data_url.split(',', 1)[1]
+                return base64.b64decode(base64_str)
+        
+        elif tag_name == 'img':
+            src = element.get_attribute('src')
+            if src and src.startswith('data:image'):
+                base64_str = src.split(',', 1)[1]
+                return base64.b64decode(base64_str)
+            elif src and src.startswith('http'):
+                import requests
+                resp = requests.get(src, timeout=10)
+                if resp.status_code == 200:
+                    return resp.content
+        
+        location = element.location
+        size = element.size
+        
+        png = driver.get_screenshot_as_png()
+        img = Image.open(io.BytesIO(png))
+        
+        left = location['x']
+        top = location['y']
+        right = location['x'] + size['width']
+        bottom = location['y'] + size['height']
+        
+        img = img.crop((left, top, right, bottom))
+        
+        buf = io.BytesIO()
+        img.save(buf, format='PNG')
+        return buf.getvalue()
+        
     except Exception as e:
         print(f"获取图片失败: {e}")
         return None
@@ -292,7 +311,6 @@ def jiuxian_send(driver, area_code, phone):
         print("5. 点击触发大图验证码")
         find_element = driver.find_element(By.ID, "captchaImage_mobile")
         find_element.click()
-        time.sleep(0.5)
         
         print("6. 获取大图验证码")
         big_bytes = get_image_by_js(driver, "captchaImage2_mobile")
