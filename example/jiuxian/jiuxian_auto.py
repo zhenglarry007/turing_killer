@@ -312,14 +312,20 @@ def jiuxian_send(driver, area_code, phone):
         find_element = driver.find_element(By.ID, "captchaImage_mobile")
         find_element.click()
         
-        print("6. 获取大图验证码")
+        print("6. 等待大图验证码出现")
+        big_element = wait_element_visible(driver, By.ID, "captchaImage2_mobile", 10)
+        if not big_element:
+            ret_entity.set_msg("大图验证码未出现")
+            return ret_entity
+        
+        print("7. 获取大图验证码")
         big_bytes = get_image_by_js(driver, "captchaImage2_mobile")
         big_len = len(big_bytes) if big_bytes else -1
         if big_len < 100:
             ret_entity.set_msg(f"bigLen:{big_len}")
             return ret_entity
         
-        print("7. 检测大图中的汉字")
+        print("8. 检测大图中的汉字")
         begin = time.time()
         word_list = get_word_by_det(big_bytes, 0.15)
         
@@ -330,7 +336,7 @@ def jiuxian_send(driver, area_code, phone):
             ret_entity.set_msg(f"size[{center_len}] not 3")
             return ret_entity
         
-        print("8. 组装点击坐标")
+        print("9. 组装点击坐标")
         center_points = []
         for i in range(3):
             word = title[i:i+1]
@@ -349,7 +355,7 @@ def jiuxian_send(driver, area_code, phone):
         
         print(f"      |title={title},result={result}->cost={cost:.2f}s")
         
-        print("9. 执行点击")
+        print("10. 执行点击")
         bg_element = driver.find_element(By.ID, "captchaImage2_mobile")
         
         use_robot = False
@@ -360,13 +366,13 @@ def jiuxian_send(driver, area_code, phone):
         
         time.sleep(0.5)
         
-        print("10. 校验验证码通过状态")
+        print("11. 校验验证码通过状态")
         succ_xpath = "//p[@id='captchaImage_mobile_success' and not(contains(@style,'display: none'))]"
         succ_element = wait_element_visible(driver, By.XPATH, succ_xpath, 30)
         succ_txt = succ_element.text if succ_element else None
         print(f"      |succTxt={succ_txt}")
         
-        print("11. 获取短信验证码")
+        print("12. 获取短信验证码")
         send_element = wait_element_clickable(driver, By.XPATH, "//span[@id='idenCodePhone']", 1)
         if send_element:
             driver.execute_script("arguments[0].click();", send_element)
@@ -374,7 +380,7 @@ def jiuxian_send(driver, area_code, phone):
             ret_entity.set_msg("未找到获取短信验证码按钮")
             return ret_entity
         
-        print("12. 等待倒计时文案")
+        print("13. 等待倒计时文案")
         gt_xpath = "//span[@id='idenCodePhoneNum' and contains(.,'秒后重新获取')]"
         gt_element = wait_element_visible(driver, By.XPATH, gt_xpath, 30)
         msg = gt_element.text if gt_element else None
