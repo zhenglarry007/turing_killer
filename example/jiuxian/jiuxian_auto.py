@@ -77,6 +77,7 @@ DATA_PATH = os.path.join(tempfile.gettempdir(), "JiuXian")
 INDEX_URL = "https://login.jiuxian.com/login.htm"
 OCR_API_URL = "http://127.0.0.1:9890/ocr"
 DET_API_URL = "http://127.0.0.1:9890/det"
+EXECUTE_COUNT = 10
 
 
 def ensure_data_dirs():
@@ -614,32 +615,20 @@ def create_driver():
 def main():
     import random
     
-    target_count = 100
-    total_duration = 48 * 3600
+    execute_count = EXECUTE_COUNT
     
-    start_time = time.time()
-    
-    print(f"开始执行酒仙网自动化任务，目标收集 {target_count} 张图片，最大兜底时长: {total_duration/3600}小时")
+    print(f"开始执行酒仙网自动化任务，执行次数: {execute_count} 次")
     
     driver = create_driver()
     
     try:
-        while True:
-            current_time = time.time()
-            elapsed_time = current_time - start_time
+        for i in range(execute_count):
+            current_round = i + 1
             
-            data_dir = os.path.join(DATA_PATH, "data")
-            saved_count = len(os.listdir(data_dir)) if os.path.exists(data_dir) else 0
-            
-            if saved_count >= target_count:
-                print(f"\n任务圆满完成！已成功收集 {saved_count} 张图片。")
-                break
-                
-            if elapsed_time >= total_duration:
-                print("已达到最大设定的运行时长，任务结束。")
-                break
-                
-            print(f"\n--- 执行时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} (已运行 {int(elapsed_time)} 秒, 已保存 {saved_count}/{target_count} 张) ---")
+            print(f"\n{'='*60}")
+            print(f"第 {current_round}/{execute_count} 次执行")
+            print(f"{'='*60}")
+            print(f"执行时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
             
             phone_prefixes = ["131", "132", "133", "135", "136", "137", "138", "139", "150", "151", "152", "153", "155", "156", "157", "158", "159", "186", "187", "188", "189"]
             random_prefix = random.choice(phone_prefixes)
@@ -650,8 +639,14 @@ def main():
             
             if result:
                 print(f"执行结果: ret={result.ret}, msg={result.msg}")
+            else:
+                print(f"执行结果: 失败")
             
             time.sleep(2)
+        
+        print(f"\n{'='*60}")
+        print(f"任务完成！共执行 {execute_count} 次")
+        print(f"{'='*60}")
             
     finally:
         print("正在关闭浏览器...")
