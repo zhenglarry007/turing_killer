@@ -5,6 +5,7 @@ import time
 import hashlib
 import json
 import tempfile
+import numpy as np
 from datetime import datetime
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
@@ -18,6 +19,58 @@ import io
 from PIL import Image
 import requests
 import base64
+
+
+class PicFinger:
+    HASH_SIZE = 16
+
+    def __init__(self, source):
+        if isinstance(source, np.ndarray):
+            if source.size != self.HASH_SIZE * self.HASH_SIZE:
+                raise ValueError(f"length of hashValue must be {self.HASH_SIZE * self.HASH_SIZE}")
+            self.binaryzation_matrix = source.flatten()
+        elif isinstance(source, list):
+            self.binaryzation_matrix = np.array(source, dtype=np.uint8)
+        else:
+            if isinstance(source, str):
+                img = Image.open(source)
+            elif isinstance(source, Image.Image):
+                img = source
+            else:
+                raise ValueError("Unsupported source type. Must be image path, PIL Image, list or numpy array.")
+            self.binaryzation_matrix = self._hash_value(img)
+
+    def get_hash_code(self):
+        compact_data = self.compact()
+        md5_hash = hashlib.md5(compact_data).hexdigest()
+        return md5_hash.upper()
+
+    def _hash_value(self, img):
+        img_resized = img.resize((self.HASH_SIZE, self.HASH_SIZE), Image.Resampling.LANCZOS)
+        img_gray = img_resized.convert('L')
+        pixels = np.array(img_gray).flatten()
+        mean_val = np.mean(pixels)
+        binary_matrix = (pixels >= mean_val).astype(np.uint8)
+        return binary_matrix
+
+    def compact(self):
+        return self._compact_array(self.binaryzation_matrix)
+
+    @staticmethod
+    def _compact_array(hash_value):
+        result_len = (len(hash_value) + 7) >> 3
+        result = bytearray(result_len)
+        b = 0
+        for i in range(len(hash_value)):
+            if (i & 7) == 0:
+                b = 0
+            if hash_value[i] == 1:
+                b |= 1 << (i & 7)
+            elif hash_value[i] != 0:
+                raise ValueError("invalid hashValue, every element must be 0 or 1")
+            if (i & 7) == 7 or i == len(hash_value) - 1:
+                result[i >> 3] = b
+        return bytes(result)
 
 
 DATA_PATH = os.path.join(tempfile.gettempdir(), "JiuXian")
@@ -122,6 +175,85 @@ def is_chinese_char(text):
         return False
     chinese_pattern = re.compile(r'^[\u4e00-\u9fff]+$')
     return bool(chinese_pattern.match(text.strip()))
+
+
+def crop_chars_from_image(image_bytes, bbox_dict, title_chars):
+    img = Image.open(io.BytesIO(image_bytes))
+    if img.mode == 'RGBA':
+        background = Image.new('RGB', img.size, (255, 255, 255))
+        background.paste(img, mask=img.split()[3])
+        img = background
+    elif img.mode != 'RGB':
+        img = img.convert('RGB')
+    
+    cropped_chars = []
+    matched_chars = []
+    
+    for char in title_chars:
+        if char in bbox_dict:
+            x1, y1, x2, y2 = bbox_dict[char]
+            char_img = img.crop((x1, y1, x2, y2))
+            cropped_chars.append(char_img)
+            matched_chars.append(char)
+    
+    return cropped_chars, matched_chars
+
+
+def combine_chars_to_image(char_images, spacing=10):
+    if not char_images:
+        return None
+    
+    total_width = sum(img.width for img in char_images) + spacing * (len(char_images) - 1)
+    max_height = max(img.height for img in char_images)
+    
+    new_img = Image.new('RGB', (total_width, max_height), (255, 255, 255))
+    
+    x_offset = 0
+    for char_img in char_images:
+        new_img.paste(char_img, (x_offset, 0))
+        x_offset += char_img.width + spacing
+    
+    return new_img
+
+
+def generate_image_hash(image):
+    if image is None:
+        return None
+    try:
+        pic_finger = PicFinger(image)
+        return pic_finger.get_hash_code()
+    except Exception as e:
+        print(f"生成图片指纹失败: {e}")
+        return hashlib.md5(str(time.time()).encode()).hexdigest().upper()
+
+
+def ensure_save_dirs(base_dir, is_success):
+    time_dir_name = datetime.now().strftime('%Y%m%d%H')
+    result_dir_name = "success" if is_success else "fail"
+    save_dir = os.path.join(base_dir, time_dir_name, result_dir_name)
+    os.makedirs(save_dir, exist_ok=True)
+    return save_dir
+
+
+def save_captcha_data(save_dir, title, big_bytes, bbox_dict, combined_img, matched_chars):
+    matched_title = "".join(matched_chars)
+    
+    hash_code = generate_image_hash(combined_img) if combined_img else "unknown"
+    
+    base_filename = f"{matched_title}_{hash_code}" if matched_title else f"unknown_{hash_code}"
+    
+    jpg_path = os.path.join(save_dir, f"{base_filename}.jpeg")
+    json_path = os.path.join(save_dir, f"{base_filename}.json")
+    
+    if combined_img:
+        combined_img.save(jpg_path, format='JPEG', quality=95)
+        print(f"组合图片已保存: {jpg_path}")
+    
+    with open(json_path, 'w', encoding='utf-8') as f:
+        json.dump(bbox_dict, f, ensure_ascii=False, indent=2)
+    print(f"检测数据已保存: {json_path}")
+    
+    return base_filename
 
 
 def get_image_by_js(driver, element_id):
@@ -267,6 +399,8 @@ def jiuxian_send(driver, area_code, phone):
     ret_entity = RetEntity()
     ensure_data_dirs()
     
+    current_base_dir = os.path.dirname(os.path.abspath(__file__))
+    
     try:
         print(f"访问登录页: {INDEX_URL}")
         driver.get(INDEX_URL)
@@ -347,32 +481,61 @@ def jiuxian_send(driver, area_code, phone):
         word_list = get_word_by_det(big_bytes, 0.15)
         
         center_json = word_list.get("center") if word_list else None
-        center_len = len(center_json) if center_json else -1
-        if center_len < 3:
-            print(f"{center_json} -> size less 3")
-            ret_entity.set_msg(f"size[{center_len}] not 3")
-            return ret_entity
+        bbox_json = word_list.get("bbox", {}) if word_list else {}
         
-        print("9. 组装点击坐标")
+        center_len = len(center_json) if center_json else -1
+        
+        print(f"检测到 {center_len} 个汉字: {list(center_json.keys()) if center_json else []}")
+        
+        matched_chars = []
         center_points = []
-        for i in range(3):
-            word = title[i:i+1]
-            center_xy = center_json.get(word) if center_json else None
-            if center_xy is None:
-                continue
-            center_points.append(center_xy)
+        is_success = False
+        
+        if center_json and len(title) == 3:
+            for i in range(3):
+                word = title[i:i+1]
+                center_xy = center_json.get(word)
+                if center_xy:
+                    center_points.append(center_xy)
+                    matched_chars.append(word)
+        
+        print(f"标题汉字: {title}, 匹配到: {matched_chars}")
+        
+        cropped_chars = []
+        combined_img = None
+        
+        if bbox_json:
+            cropped_chars, actual_matched = crop_chars_from_image(
+                big_bytes, bbox_json, title
+            )
+            if cropped_chars:
+                combined_img = combine_chars_to_image(cropped_chars)
+        
+        all_detected_bbox = bbox_json if bbox_json else {}
+        save_dir = ensure_save_dirs(current_base_dir, len(matched_chars) == 3)
+        
+        if all_detected_bbox:
+            save_captcha_data(
+                save_dir, 
+                title, 
+                big_bytes, 
+                all_detected_bbox, 
+                combined_img, 
+                matched_chars
+            )
+        
+        if len(center_points) != 3:
+            result = "|".join(center_points)
+            print(f"{result} -> size not 3 (需要3个，实际{len(center_points)}个)")
+            ret_entity.set_msg(f"size[{len(center_points)}] not 3")
+            return ret_entity
         
         result = "|".join(center_points)
         cost = time.time() - begin
         
-        if len(center_points) != 3:
-            print(f"{result} -> size not 3")
-            ret_entity.set_msg(f"size[{len(center_points)}] not 3")
-            return ret_entity
-        
         print(f"      |title={title},result={result}->cost={cost:.2f}s")
         
-        print("10. 执行点击")
+        print("9. 执行点击")
         bg_element = driver.find_element(By.ID, "captchaImage2_mobile")
         
         use_robot = False
@@ -383,13 +546,13 @@ def jiuxian_send(driver, area_code, phone):
         
         time.sleep(0.5)
         
-        print("11. 校验验证码通过状态")
+        print("10. 校验验证码通过状态")
         succ_xpath = "//p[@id='captchaImage_mobile_success' and not(contains(@style,'display: none'))]"
         succ_element = wait_element_visible(driver, By.XPATH, succ_xpath, 30)
         succ_txt = succ_element.text if succ_element else None
         print(f"      |succTxt={succ_txt}")
         
-        print("12. 获取短信验证码")
+        print("11. 获取短信验证码")
         send_element = wait_element_clickable(driver, By.XPATH, "//span[@id='idenCodePhone']", 1)
         if send_element:
             driver.execute_script("arguments[0].click();", send_element)
@@ -397,7 +560,7 @@ def jiuxian_send(driver, area_code, phone):
             ret_entity.set_msg("未找到获取短信验证码按钮")
             return ret_entity
         
-        print("13. 等待倒计时文案")
+        print("12. 等待倒计时文案")
         gt_xpath = "//span[@id='idenCodePhoneNum' and contains(.,'秒后重新获取')]"
         gt_element = wait_element_visible(driver, By.XPATH, gt_xpath, 30)
         msg = gt_element.text if gt_element else None
@@ -405,16 +568,15 @@ def jiuxian_send(driver, area_code, phone):
         
         if msg is not None:
             ret_entity.set_ret(0)
-            bbox_json = word_list.get("bbox", {}) if word_list else {}
-            ck = gen_checksum(big_bytes)
-            out_path = os.path.join(DATA_PATH, "data", f"{title}_{ck}")
-            
-            with open(out_path + ".jpg", 'wb') as f:
-                f.write(big_bytes)
-            with open(out_path + ".json", 'w', encoding='utf-8') as f:
-                json.dump(bbox_json, f, ensure_ascii=False, indent=2)
-            
-            print(f"数据已保存: {out_path}")
+            save_dir_success = ensure_save_dirs(current_base_dir, True)
+            save_captcha_data(
+                save_dir_success, 
+                title, 
+                big_bytes, 
+                bbox_json, 
+                combined_img, 
+                matched_chars
+            )
         
         return ret_entity
         
