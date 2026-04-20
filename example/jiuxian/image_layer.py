@@ -4,11 +4,103 @@ import hashlib
 import time
 import json
 import numpy as np
+import sys
+import importlib.util
 from datetime import datetime
 from PIL import Image
 import io
 
-from api_layer import call_ocr_api
+from api_layer import call_ocr_api, call_det_api
+
+MyOcr = None
+
+def _load_myocr_class():
+    """
+    动态加载 test_word_api.py 中的 MyOcr 类
+    使用 importlib 从指定路径加载，避免 config 模块冲突
+    """
+    global MyOcr
+    
+    # 计算 demo 目录路径
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    demo_dir = os.path.join(os.path.dirname(os.path.dirname(current_dir)), 'demo')
+    
+    if not os.path.exists(demo_dir):
+        print(f"警告: demo 目录不存在: {demo_dir}")
+        return None
+    
+    test_word_api_path = os.path.join(demo_dir, 'test_word_api.py')
+    if not os.path.exists(test_word_api_path):
+        print(f"警告: test_word_api.py 不存在: {test_word_api_path}")
+        return None
+    
+    original_config_module = None
+    try:
+        # 保存原始的 sys.modules['config']
+        original_config_module = sys.modules.get('config', None)
+        
+        # 保存原始 sys.path
+        original_sys_path = sys.path.copy()
+        
+        # 将 demo 目录添加到 sys.path 最前面
+        if demo_dir not in sys.path:
+            sys.path.insert(0, demo_dir)
+        
+        # 先加载 demo/config.py 中的 Config 类
+        config_path = os.path.join(demo_dir, 'config.py')
+        if os.path.exists(config_path):
+            spec_config = importlib.util.spec_from_file_location("demo_config", config_path)
+            if spec_config and spec_config.loader:
+                demo_config = importlib.util.module_from_spec(spec_config)
+                sys.modules["demo_config"] = demo_config
+                spec_config.loader.exec_module(demo_config)
+                
+                # 临时将 sys.modules['config'] 设置为 demo_config
+                # 这样 test_word_api 在加载时会使用 demo/config.py 中的 Config 类
+                sys.modules['config'] = demo_config
+        
+        # 现在加载 test_word_api.py
+        spec = importlib.util.spec_from_file_location("test_word_api", test_word_api_path)
+        if spec and spec.loader:
+            test_word_api_module = importlib.util.module_from_spec(spec)
+            sys.modules["test_word_api"] = test_word_api_module
+            spec.loader.exec_module(test_word_api_module)
+            
+            # 获取 MyOcr 类
+            if hasattr(test_word_api_module, 'MyOcr'):
+                MyOcr = test_word_api_module.MyOcr
+                print("✓ 成功加载 MyOcr 类")
+        
+        # 恢复原始的 sys.modules['config']
+        if original_config_module is not None:
+            sys.modules['config'] = original_config_module
+        else:
+            # 如果之前没有 config 模块，删除它
+            if 'config' in sys.modules:
+                del sys.modules['config']
+        
+        # 恢复原始 sys.path
+        sys.path = original_sys_path
+        
+        return MyOcr
+        
+    except Exception as e:
+        print(f"加载 MyOcr 类失败: {e}")
+        import traceback
+        traceback.print_exc()
+        
+        # 确保恢复原始状态
+        if 'config' in sys.modules and 'original_config_module' in dir():
+            if original_config_module is not None:
+                sys.modules['config'] = original_config_module
+        
+        return None
+
+# 尝试加载 MyOcr 类
+_load_myocr_class()
+
+# 导入配置（在 _load_myocr_class 之后导入，确保使用正确的 config 模块）
+from config import DET_API_URL, OCR_API_URL
 
 
 class PicFinger:
@@ -70,9 +162,78 @@ def is_chinese_char(text):
     return bool(chinese_pattern.match(text.strip()))
 
 
-def get_word_by_det(image_bytes, ext_rate=0.15):
-    from api_layer import call_det_api
+def _normalize_box_with_padding(bbox, img_width, img_height, padding=2):
+    x1, y1, x2, y2 = bbox
+    x1 = max(0, int(x1) - padding)
+    y1 = max(0, int(y1) - padding)
+    x2 = min(img_width, int(x2) + padding)
+    y2 = min(img_height, int(y2) + padding)
+    return [x1, y1, x2, y2]
+
+
+def _is_valid_box_shape(box):
+    x1, y1, x2, y2 = box
+    width = x2 - x1
+    height = y2 - y1
+    if width <= 0 or height <= 0:
+        return False
+
+    ratio_w_h = width / height
+    ratio_h_w = height / width
+    return ratio_w_h <= 2 and ratio_h_w <= 2
+
+
+def get_word_by_det(image_bytes, ext_rate=0.05):
+    if MyOcr is None:
+        print("警告: 无法导入 MyOcr 类，使用备用实现")
+        return _get_word_by_det_fallback(image_bytes, ext_rate)
     
+    my_ocr = MyOcr(api_url=DET_API_URL, ocr_api_url=OCR_API_URL, ext_rate=ext_rate)
+    
+    bboxes = my_ocr.detect_objects("captcha.jpg", image_bytes)
+    if not bboxes:
+        return None
+    
+    img = Image.open(io.BytesIO(image_bytes))
+    if img.mode == 'RGBA':
+        background = Image.new('RGB', img.size, (255, 255, 255))
+        background.paste(img, mask=img.split()[3])
+        img = background
+    elif img.mode != 'RGB':
+        img = img.convert('RGB')
+    
+    img_width, img_height = img.size
+    
+    result = {"center": {}, "bbox": {}}
+    
+    for bbox in bboxes:
+        # 与 demo/test_word_api.py 的处理逻辑保持一致：
+        # 1) 原框先加固定2像素padding；2) 过滤宽高比异常框；3) 再做比例扩展后OCR
+        box = _normalize_box_with_padding(bbox, img_width, img_height, padding=2)
+        if not _is_valid_box_shape(box):
+            continue
+
+        x1, y1, x2, y2 = box
+        enlarged_box = my_ocr.enlarge_bbox(box, img_width, img_height, ext_rate)
+        
+        center_x = (x1 + x2) // 2
+        center_y = (y1 + y2) // 2
+        
+        cropped = img.crop((enlarged_box[0], enlarged_box[1], enlarged_box[2], enlarged_box[3]))
+        buf = io.BytesIO()
+        cropped.save(buf, format='JPEG')
+        cropped_bytes = buf.getvalue()
+        
+        text = my_ocr.recognize_text(cropped_bytes)
+        
+        if text and my_ocr.is_chinese_char(text):
+            result["center"][text] = f"{center_x},{center_y}"
+            result["bbox"][text] = [x1, y1, x2, y2]
+    
+    return result
+
+
+def _get_word_by_det_fallback(image_bytes, ext_rate=0.05):
     bboxes = call_det_api(image_bytes)
     if not bboxes:
         return None
@@ -89,8 +250,14 @@ def get_word_by_det(image_bytes, ext_rate=0.15):
     
     result = {"center": {}, "bbox": {}}
     
-    for i, bbox in enumerate(bboxes):
-        x1, y1, x2, y2 = bbox
+    for bbox in bboxes:
+        # 与 demo/test_word_api.py 的处理逻辑保持一致：
+        # 1) 原框先加固定2像素padding；2) 过滤宽高比异常框；3) 再做比例扩展后OCR
+        box = _normalize_box_with_padding(bbox, img_width, img_height, padding=2)
+        if not _is_valid_box_shape(box):
+            continue
+
+        x1, y1, x2, y2 = box
         
         if ext_rate > 0:
             delta_x = int(img_width * ext_rate + 0.5)
@@ -217,6 +384,38 @@ def save_captcha_data(save_dir, title, big_bytes, bbox_dict, combined_img, match
         json.dump(bbox_dict, f, ensure_ascii=False, indent=2)
     print(f"检测数据已保存: {json_path}")
     
+    return base_filename
+
+
+def save_captcha_data_keep_big_image(save_dir, title, big_bytes, bbox_dict, matched_chars):
+    matched_title = "".join(matched_chars)
+
+    hash_code = "unknown"
+    image_ext = "png"
+    if big_bytes:
+        try:
+            big_img = Image.open(io.BytesIO(big_bytes))
+            hash_code = generate_image_hash(big_img)
+            img_format = (big_img.format or "PNG").lower()
+            image_ext = "jpg" if img_format == "jpeg" else img_format
+        except Exception as e:
+            print(f"解析大图验证码失败，使用字节MD5作为hash: {e}")
+            hash_code = hashlib.md5(big_bytes).hexdigest().upper()
+
+    base_filename = f"{matched_title}_{hash_code}" if matched_title else f"unknown_{hash_code}"
+
+    image_path = os.path.join(save_dir, f"{base_filename}.{image_ext}")
+    json_path = os.path.join(save_dir, f"{base_filename}.json")
+
+    if big_bytes:
+        with open(image_path, 'wb') as f:
+            f.write(big_bytes)
+        print(f"大图验证码已保存: {image_path}")
+
+    with open(json_path, 'w', encoding='utf-8') as f:
+        json.dump(bbox_dict, f, ensure_ascii=False, indent=2)
+    print(f"检测数据已保存: {json_path}")
+
     return base_filename
 
 

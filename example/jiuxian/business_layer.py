@@ -1,13 +1,12 @@
 import os
 import re
 import time
-from datetime import datetime
+import tempfile
 from PIL import Image
 import io
 from selenium.webdriver.common.by import By
 
 from config import (
-    BASE_DIR, 
     DATA_PATH, 
     INDEX_URL, 
     TITLE_CROP_BOX, 
@@ -18,10 +17,8 @@ from image_layer import (
     ensure_data_dirs,
     ensure_time_dir,
     ensure_save_dirs,
-    save_captcha_data,
+    save_captcha_data_keep_big_image,
     crop_image,
-    crop_chars_from_image,
-    combine_chars_to_image,
     get_word_by_det,
     is_chinese_char
 )
@@ -35,11 +32,22 @@ from browser_layer import (
 )
 
 
+def get_system_tmp_dir() -> str:
+    tmp = tempfile.gettempdir()
+
+    if not os.path.exists(tmp):
+        # 极端兜底（几乎不会发生）
+        tmp = os.environ.get("TMPDIR") or os.environ.get("TEMP") or "/tmp"
+
+    return tmp
+
+
 def jiuxian_send(driver, area_code, phone):
     ret_entity = RetEntity()
     ensure_data_dirs(DATA_PATH)
     
-    current_base_dir = BASE_DIR
+    current_base_dir = os.path.join(get_system_tmp_dir(), "JiuXian")
+    os.makedirs(current_base_dir, exist_ok=True)
     
     try:
         print(f"访问登录页: {INDEX_URL}")
@@ -103,6 +111,9 @@ def jiuxian_send(driver, area_code, phone):
         
         time_dir, title_dir = ensure_time_dir(current_base_dir)
         title_file = os.path.join(title_dir, f"{title}.png")
+        if small_byte is None:
+            ret_entity.set_msg("small captcha is empty")
+            return ret_entity
         with open(title_file, 'wb') as f:
             f.write(small_byte)
         print(f"标题验证码已保存: {title_file}")
@@ -132,7 +143,8 @@ def jiuxian_send(driver, area_code, phone):
         
         print("8. 检测大图中的汉字")
         begin = time.time()
-        word_list = get_word_by_det(big_bytes, 0.15)
+        # 与 demo/test_word_api.py 保持一致，使用 0.05 的扩展比例
+        word_list = get_word_by_det(big_bytes, 0.05)
         
         center_json = word_list.get("center") if word_list else None
         bbox_json = word_list.get("bbox", {}) if word_list else {}
@@ -154,30 +166,6 @@ def jiuxian_send(driver, area_code, phone):
         
         print(f"标题汉字: {title}, 匹配到: {matched_chars}")
         
-        cropped_chars = []
-        combined_img = None
-        
-        if bbox_json:
-            cropped_chars, actual_matched = crop_chars_from_image(
-                big_bytes, bbox_json, title
-            )
-            if cropped_chars:
-                combined_img = combine_chars_to_image(cropped_chars)
-        
-        all_detected_bbox = bbox_json if bbox_json else {}
-        is_full_match = len(matched_chars) == 3
-        save_dir = ensure_save_dirs(current_base_dir, is_full_match)
-        
-        print(f"8.5 保存检测数据 (匹配完整={is_full_match})")
-        save_captcha_data(
-            save_dir, 
-            title, 
-            big_bytes, 
-            all_detected_bbox, 
-            combined_img, 
-            matched_chars
-        )
-        
         if len(center_points) != 3:
             result = "|".join(center_points)
             print(f"{result} -> size not 3 (需要3个，实际{len(center_points)}个)")
@@ -189,6 +177,20 @@ def jiuxian_send(driver, area_code, phone):
         
         print(f"      |title={title},result={result}->cost={cost:.2f}s")
         
+        print("9-12. (已跳过) 直接保存样本数据")
+        ret_entity.set_ret(0)
+        ret_entity.set_msg("已跳过点击，仅采集样本")
+        save_dir_success = ensure_save_dirs(current_base_dir, True)
+        save_captcha_data_keep_big_image(
+            save_dir_success, 
+            title, 
+            big_bytes, 
+            bbox_json, 
+            matched_chars
+        )
+        return ret_entity
+        
+        '''
         print("9. 执行点击")
         bg_element = driver.find_element(By.ID, "captchaImage2_mobile")
         
@@ -223,16 +225,16 @@ def jiuxian_send(driver, area_code, phone):
         if msg is not None:
             ret_entity.set_ret(0)
             save_dir_success = ensure_save_dirs(current_base_dir, True)
-            save_captcha_data(
+            save_captcha_data_keep_big_image(
                 save_dir_success, 
                 title, 
                 big_bytes, 
                 bbox_json, 
-                combined_img, 
                 matched_chars
             )
         
         return ret_entity
+        '''
         
     except Exception as e:
         print(f"phone={phone},e={e}")
