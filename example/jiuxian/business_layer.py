@@ -52,34 +52,34 @@ def jiuxian_send(driver, area_code, phone):
     try:
         print(f"访问登录页: {INDEX_URL}")
         driver.get(INDEX_URL)
-        time.sleep(1)
+        time.sleep(0.1)
         
         print("1. 切换到手机动态密码登录")
         tab_element = wait_element_clickable(
             driver, 
             By.XPATH, 
             "//a[text()='手机动态密码登录']", 
-            10
+            3
         )
         if tab_element:
             tab_element.click()
-            time.sleep(0.5)
+            time.sleep(0.1)
         else:
             ret_entity.set_msg("未找到手机动态密码登录标签")
             return ret_entity
         
         print("2. 输入手机号")
-        phone_element = wait_element_visible(driver, By.NAME, "phone", 5)
+        phone_element = wait_element_visible(driver, By.NAME, "phone", 3)
         if phone_element:
             phone_element.clear()
             phone_element.send_keys(phone)
-            time.sleep(1)
+            time.sleep(0.1)
         else:
             ret_entity.set_msg("未找到手机号输入框")
             return ret_entity
         
         print("3. 获取标题验证码小图")
-        captcha_element = wait_element_visible(driver, By.ID, "captchaImage_mobile", 10)
+        captcha_element = wait_element_visible(driver, By.ID, "captchaImage_mobile", 3)
         if not captcha_element:
             ret_entity.set_msg("标题验证码元素不可见")
             return ret_entity
@@ -121,10 +121,10 @@ def jiuxian_send(driver, area_code, phone):
         print("5. 点击触发大图验证码")
         find_element = driver.find_element(By.ID, "captchaImage_mobile")
         find_element.click()
-        time.sleep(0.5)
+        time.sleep(0.1)
         
         print("6. 等待大图验证码出现")
-        big_element = wait_element_visible(driver, By.ID, "captchaImage2_mobile", 10)
+        big_element = wait_element_visible(driver, By.ID, "captchaImage2_mobile", 3)
         if not big_element:
             ret_entity.set_msg("大图验证码未出现")
             return ret_entity
