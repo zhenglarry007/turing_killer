@@ -176,21 +176,7 @@ def jiuxian_send(driver, area_code, phone):
         cost = time.time() - begin
         
         print(f"      |title={title},result={result}->cost={cost:.2f}s")
-        
-        print("9-12. (已跳过) 直接保存样本数据")
-        ret_entity.set_ret(0)
-        ret_entity.set_msg("已跳过点击，仅采集样本")
-        save_dir_success = ensure_save_dirs(current_base_dir, True)
-        save_captcha_data_keep_big_image(
-            save_dir_success, 
-            title, 
-            big_bytes, 
-            bbox_json, 
-            matched_chars
-        )
-        return ret_entity
-        
-        '''
+
         print("9. 执行点击")
         bg_element = driver.find_element(By.ID, "captchaImage2_mobile")
         
@@ -200,11 +186,11 @@ def jiuxian_send(driver, area_code, phone):
         else:
             action_move_word_click(driver, bg_element, 1.0, result)
         
-        time.sleep(0.5)
+        time.sleep(0.1)
         
         print("10. 校验验证码通过状态")
         succ_xpath = "//p[@id='captchaImage_mobile_success' and not(contains(@style,'display: none'))]"
-        succ_element = wait_element_visible(driver, By.XPATH, succ_xpath, 30)
+        succ_element = wait_element_visible(driver, By.XPATH, succ_xpath, 5)
         succ_txt = succ_element.text if succ_element else None
         print(f"      |succTxt={succ_txt}")
         
@@ -216,25 +202,19 @@ def jiuxian_send(driver, area_code, phone):
             ret_entity.set_msg("未找到获取短信验证码按钮")
             return ret_entity
         
-        print("12. 等待倒计时文案")
-        gt_xpath = "//span[@id='idenCodePhoneNum' and contains(.,'秒后重新获取')]"
-        gt_element = wait_element_visible(driver, By.XPATH, gt_xpath, 30)
-        msg = gt_element.text if gt_element else None
-        ret_entity.set_msg(f"msg:{msg}")
-        
-        if msg is not None:
-            ret_entity.set_ret(0)
-            save_dir_success = ensure_save_dirs(current_base_dir, True)
-            save_captcha_data_keep_big_image(
-                save_dir_success, 
-                title, 
-                big_bytes, 
-                bbox_json, 
-                matched_chars
-            )
-        
+        print("12. 已发送验证码，直接采集样本数据（不等待倒计时文案）")
+        ret_entity.set_ret(0)
+        ret_entity.set_msg("sms sent, sample collected")
+        save_dir_success = ensure_save_dirs(current_base_dir, True)
+        save_captcha_data_keep_big_image(
+            save_dir_success, 
+            title, 
+            big_bytes, 
+            bbox_json, 
+            matched_chars
+        )
+
         return ret_entity
-        '''
         
     except Exception as e:
         print(f"phone={phone},e={e}")
