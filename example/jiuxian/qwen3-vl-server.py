@@ -22,32 +22,44 @@ class Server():
     def __init__(self):
         
         print("欢迎使用turing_killer系列，本项目专注图灵仿真测试，由topliu和zhi共同发起，以攻促防，带动行业升级")   
+        print("公安部网络安全保卫局通过“国家网络安全通报中心”正式发布预警，明确指出图形类验证机制已面临被人工智能技术系统性绕过的实战风险。")
         MODEL_ID = "Qwen/Qwen3-VL-8B-Instruct"
         print("正在加载 processor...["+MODEL_ID+"]")
         self.processor = AutoProcessor.from_pretrained(MODEL_ID, trust_remote_code=True)
 
         qwen_config = args.qwen_config
         print("正在配置 "+qwen_config+" 量化...")
-        # 2. 使用 BitsAndBytesConfig 对象来配置量化
-        if qwen_config == 'int4':
-            # 2. 配置量化 (INT4 速度最快)
-            quantization_config = BitsAndBytesConfig(
-                load_in_4bit=True,
-                bnb_4bit_compute_dtype=torch.bfloat16,
-                bnb_4bit_use_double_quant=True,
-                bnb_4bit_quant_type="nf4"
-            )
-        elif qwen_config == 'int8':
-            quantization_config = BitsAndBytesConfig(
-                load_in_8bit=True
-            )
-        print("正在加载模型...")
-        self.model = AutoModelForImageTextToText.from_pretrained(
-            MODEL_ID,
-            device_map="auto",
-            trust_remote_code=True,
-            quantization_config=quantization_config # 3. 将配置对象传入
-        ).eval()
+        if qwen_config == 'bfloat16':
+           print("正在加载模型...")
+           self.model = AutoModelForImageTextToText.from_pretrained(
+                MODEL_ID,
+                device_map="auto",
+                trust_remote_code=True,
+                torch_dtype=torch.bfloat16,  # <--- 关键：指定数据类型为 bfloat16
+                # 如果需要兼容旧卡或显存极度紧张，也可以改为 torch.float16
+            ).eval()
+        else:
+            # 2. 使用 BitsAndBytesConfig 对象来配置量化
+            if qwen_config == 'int4':
+                # 2. 配置量化 (INT4 速度最快)
+                quantization_config = BitsAndBytesConfig(
+                    load_in_4bit=True,
+                    bnb_4bit_compute_dtype=torch.bfloat16,
+                    bnb_4bit_use_double_quant=True,
+                    bnb_4bit_quant_type="nf4"
+                )
+            elif qwen_config == 'int8':
+                quantization_config = BitsAndBytesConfig(
+                    load_in_8bit=True
+                )      
+
+            print("正在加载模型...")
+            self.model = AutoModelForImageTextToText.from_pretrained(
+                MODEL_ID,
+                device_map="auto",
+                trust_remote_code=True,
+                quantization_config=quantization_config # 3. 将配置对象传入
+            ).eval()
 
        
   
@@ -87,7 +99,7 @@ def set_ret(result, ret_type='text'):
         if isinstance(result, Exception):
             return json.dumps({"status": 200, "result": "", "msg": str(result)})
         else:
-            return json.dumps({"status": 200, "result": result, "msg": ""})
+            return json.dumps({"status": 200, "result": result, "msg": ""},ensure_ascii=False)
     else:
         if isinstance(result, Exception):
             return ''
@@ -114,7 +126,8 @@ def ocr(opt):
                     "role": "user",
                     "content": [
                         {"type": "image", "image": image},
-                        {"type": "text", "text": "识别图中所有文字，按从左到右、从上到下顺序输出。不要任何解释，只返回文字。"}
+                        #{"type": "text", "text": "请识别图像【最中心】的主体汉字。忽略边缘处被截断、模糊或与背景重叠的干扰字符。只输出画面中央那个完整且清晰的汉字，不要任何解释。"}
+                        {"type": "text", "text": "请识别图像【最中心】的主体汉字,图中包含发生几何形变（弯曲/扭曲/倾斜）的文字,请忽略文字的形状畸变，专注于识别汉字的笔画结构。忽略边缘处被截断、模糊或与背景重叠的干扰字符。只输出画面中央那个完整且清晰的汉字，不要任何解释。"}
                     ]
                 }
             ]
@@ -127,7 +140,7 @@ def ocr(opt):
             start_time = time.time()
 
             with torch.no_grad():
-                generated_ids = model.generate(**inputs, max_new_tokens=256, do_sample=False)
+                generated_ids = model.generate(**inputs, max_new_tokens=3, do_sample=False)
 
             # 2. --- 结束计时 ---
             end_time = time.time()
@@ -144,7 +157,7 @@ def ocr(opt):
             output_len = generated_ids.shape[1] - input_len
             tokens_per_second = output_len / inference_duration if inference_duration > 0 else 0
             # print cost
-            print(f"推理总耗时: {inference_duration:.2f} 秒 | 生成速度: {tokens_per_second:.2f} tokens/秒 | 生成Token数: {output_len}")            
+            print(f"result:{response} 推理总耗时: {inference_duration:.2f} 秒 | 生成速度: {tokens_per_second:.2f} tokens/秒 | 生成Token数: {output_len}")            
             return set_ret(response, 'json')  
              
         else:
