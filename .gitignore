@@ -9,3 +9,5 @@ __pycache__/
 *.jpeg
 *.json
 demo/output/
+*.jpeg
+*.json
